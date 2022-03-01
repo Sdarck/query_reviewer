@@ -1,4 +1,6 @@
-require "ostruct"
+# frozen_string_literal: true
+
+require 'ostruct'
 
 module QueryReviewer
   # a single SQL SELECT query
@@ -8,12 +10,12 @@ module QueryReviewer
     cattr_accessor :next_id
     self.next_id = 1
 
-    def initialize(sql, rows, full_trace, duration = 0.0, profile = nil, command = "SELECT", affected_rows = 1, sanitized_sql = nil)
+    def initialize(sql, rows, full_trace, duration = 0.0, profile = nil, command = 'SELECT', affected_rows = 1, sanitized_sql = nil)
       @trace = full_trace
       @rows = rows
       @sqls = [sql]
       @sanitized_sql = sanitized_sql
-      @subqueries = rows ? rows.collect{|row| SqlSubQuery.new(self, row)} : []
+      @subqueries = rows ? rows.collect { |row| SqlSubQuery.new(self, row) } : []
       @id = (self.class.next_id += 1)
       @profiles = profile ? [profile.collect { |p| OpenStruct.new(p) }] : [nil]
       @durations = [duration.to_f]
@@ -45,7 +47,11 @@ module QueryReviewer
     end
 
     def duration_stats
-      "TOTAL:#{'%.3f' % duration}  AVG:#{'%.3f' % (durations.sum / durations.size)}  MAX:#{'%.3f' % (durations.max)}  MIN:#{'%.3f' % (durations.min)}"
+      "TOTAL:#{'%.3f' % duration}  AVG:#{format('%.3f',
+                                                (durations.sum / durations.size))}  MAX:#{format('%.3f',
+                                                                                                 durations.max)}  MIN:#{format(
+                                                                                                   '%.3f', durations.min
+                                                                                                 )}"
     end
 
     def to_table
@@ -53,15 +59,15 @@ module QueryReviewer
     end
 
     def warnings
-      self.subqueries.collect(&:warnings).flatten + @warnings
+      subqueries.collect(&:warnings).flatten + @warnings
     end
 
     def has_warnings?
-      !self.warnings.empty?
+      !warnings.empty?
     end
 
     def max_severity
-      self.warnings.empty? ? 0 : self.warnings.collect(&:severity).max
+      warnings.empty? ? 0 : warnings.collect(&:severity).max
     end
 
     def table
@@ -69,19 +75,22 @@ module QueryReviewer
     end
 
     def analyze!
-      self.subqueries.collect(&:analyze!)
+      subqueries.collect(&:analyze!)
       if duration
-        if duration >= QueryReviewer::CONFIGURATION["critical_duration_threshold"]
-          warn(:problem => "Query took #{duration} seconds", :severity => 9)
-        elsif duration >= QueryReviewer::CONFIGURATION["warn_duration_threshold"]
-          warn(:problem => "Query took #{duration} seconds", :severity => QueryReviewer::CONFIGURATION["critical_severity"])
+        if duration >= QueryReviewer::CONFIGURATION['critical_duration_threshold']
+          warn(problem: "Query took #{duration} seconds", severity: 9)
+        elsif duration >= QueryReviewer::CONFIGURATION['warn_duration_threshold']
+          warn(problem: "Query took #{duration} seconds",
+               severity: QueryReviewer::CONFIGURATION['critical_severity'])
         end
       end
 
-      if affected_rows >= QueryReviewer::CONFIGURATION["critical_affected_rows"]
-        warn(:problem => "#{affected_rows} rows affected", :severity => 9, :description => "An UPDATE or DELETE query can be slow and lock tables if it affects many rows.")
-      elsif affected_rows >= QueryReviewer::CONFIGURATION["warn_affected_rows"]
-        warn(:problem => "#{affected_rows} rows affected", :severity => QueryReviewer::CONFIGURATION["critical_severity"], :description => "An UPDATE or DELETE query can be slow and lock tables if it affects many rows.")
+      if affected_rows >= QueryReviewer::CONFIGURATION['critical_affected_rows']
+        warn(problem: "#{affected_rows} rows affected", severity: 9,
+             description: 'An UPDATE or DELETE query can be slow and lock tables if it affects many rows.')
+      elsif affected_rows >= QueryReviewer::CONFIGURATION['warn_affected_rows']
+        warn(problem: "#{affected_rows} rows affected",
+             severity: QueryReviewer::CONFIGURATION['critical_severity'], description: 'An UPDATE or DELETE query can be slow and lock tables if it affects many rows.')
       end
     end
 
@@ -90,10 +99,12 @@ module QueryReviewer
     end
 
     def relevant_trace
-      trace.collect(&:strip).select{|t| t.starts_with?(Rails.root.to_s) &&
-          (!t.starts_with?("#{Rails.root}/vendor") || QueryReviewer::CONFIGURATION["trace_includes_vendor"]) &&
-          (!t.starts_with?("#{Rails.root}/lib") || QueryReviewer::CONFIGURATION["trace_includes_lib"]) &&
-          !t.starts_with?("#{Rails.root}/vendor/plugins/query_reviewer") }
+      trace.collect(&:strip).select do |t|
+        t.starts_with?(Rails.root.to_s) &&
+          (!t.starts_with?("#{Rails.root}/vendor") || QueryReviewer::CONFIGURATION['trace_includes_vendor']) &&
+          (!t.starts_with?("#{Rails.root}/lib") || QueryReviewer::CONFIGURATION['trace_includes_lib']) &&
+          !t.starts_with?("#{Rails.root}/vendor/plugins/query_reviewer")
+      end
     end
 
     def full_trace
@@ -102,29 +113,29 @@ module QueryReviewer
 
     def warn(options)
       options[:query] = self
-      options[:table] ||= self.table
+      options[:table] ||= table
       @warnings << QueryWarning.new(options)
     end
 
     def select?
-      self.command == "SELECT"
+      command == 'SELECT'
     end
 
     def self.generate_full_trace(trace = Kernel.caller)
-      trace.collect(&:strip).select{|t| !t.starts_with?("#{Rails.root}/vendor/plugins/query_reviewer") }
+      trace.collect(&:strip).reject { |t| t.starts_with?("#{Rails.root}/vendor/plugins/query_reviewer") }
     end
 
     def self.sanitize_strings_and_numbers_from_sql(sql)
       new_sql = sql.clone
       new_sql = new_sql.to_sql if new_sql.respond_to?(:to_sql)
-      new_sql.gsub!(/\b\d+\b/, "N")
-      new_sql.gsub!(/\b0x[0-9A-Fa-f]+\b/, "N")
+      new_sql.gsub!(/\b\d+\b/, 'N')
+      new_sql.gsub!(/\b0x[0-9A-Fa-f]+\b/, 'N')
       new_sql.gsub!(/''/, "'S'")
-      new_sql.gsub!(/""/, "\"S\"")
-      new_sql.gsub!(/\\'/, "")
-      new_sql.gsub!(/\\"/, "")
+      new_sql.gsub!(/""/, '"S"')
+      new_sql.gsub!(/\\'/, '')
+      new_sql.gsub!(/\\"/, '')
       new_sql.gsub!(/'[^']+'/, "'S'")
-      new_sql.gsub!(/"[^"]+"/, "\"S\"")
+      new_sql.gsub!(/"[^"]+"/, '"S"')
       new_sql
     end
   end
