@@ -1,4 +1,3 @@
-# frozen_string_literal: true
 
 namespace :query_reviewer do
   desc 'Create a default config/query_reviewer.yml'

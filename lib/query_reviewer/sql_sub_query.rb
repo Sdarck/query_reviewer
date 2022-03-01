@@ -1,4 +1,3 @@
-# frozen_string_literal: true
 
 module QueryReviewer
   # a single part of an SQL SELECT query

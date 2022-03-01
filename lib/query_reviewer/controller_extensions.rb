@@ -1,4 +1,3 @@
-# frozen_string_literal: true
 
 require 'action_view'
 require File.join(File.dirname(__FILE__), 'views', 'query_review_box_helper')
