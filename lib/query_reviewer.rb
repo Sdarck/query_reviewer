@@ -6,7 +6,7 @@ module QueryReviewer
   CONFIGURATION = {}.freeze
   
   def self.load_configuration
-    default_config = YAML.safe_load(ERB.new(File.read(File.expand_path('query_reviewer_defaults.yml', __dir__))).result)
+    default_config = YAML.safe_load(ERB.new(File.read(File.expand_path('query_reviewer_defaults.yml', "../.."))).result)
     
     CONFIGURATION.merge!(default_config['all'] || {})
     CONFIGURATION.merge!(default_config[Rails.env || 'test'] || {})

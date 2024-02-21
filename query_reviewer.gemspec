@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.description = s.summary
   s.files = %w[MIT-LICENSE Rakefile README.md query_reviewer_defaults.yml] + Dir['lib/**/*']
   s.license = 'MIT'
-  s.required_ruby_version = '>= 3.0.0'
+  s.required_ruby_version = '>= 2.6.6'
   s.add_dependency 'rails', '>= 6.0'
   s.add_development_dependency 'rake'
   s.metadata = {
