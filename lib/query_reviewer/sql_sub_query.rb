@@ -1,12 +1,9 @@
-
 module QueryReviewer
-  # a single part of an SQL SELECT query
-  class SqlSubQuery < OpenStruct
+  class SqlSubQuery
     include MysqlAnalyzer
-
-    delegate :sql, to: :parent
-    attr_reader :cols, :warnings, :parent
-
+    
+    attr_reader :sql, :cols, :warnings, :parent
+    
     def initialize(parent, cols)
       @parent = parent
       @warnings = []
@@ -14,23 +11,26 @@ module QueryReviewer
         memo[obj[0].to_s.downcase] = obj[1].to_s.downcase
       end
       @cols['query_type'] = @cols.delete('type')
-      super(@cols)
     end
-
+    
+    def sql
+      parent.sql
+    end
+    
     def analyze!
       @warnings = []
       adapter_name = ActiveRecord::Base.connection.instance_variable_get('@config')[:adapter]
       adapter_name = 'mysql' if adapter_name == 'mysql2'
       method_name = "do_#{adapter_name}_analysis!"
-      send(method_name.to_sym)
+      send(method_name)
     end
-
+    
     def table
       @table[:table]
     end
-
+    
     private
-
+    
     def warn(options)
       if options[:field]
         field = options.delete(:field)
@@ -41,7 +41,7 @@ module QueryReviewer
       options[:table] = table
       @warnings << QueryWarning.new(options)
     end
-
+    
     def praise(options)
       # no credit, only pain
     end

@@ -1,109 +1,93 @@
-
 module QueryReviewer
   module Views
     module QueryReviewBoxHelper
       def parent_div_class
         "sql_#{parent_div_status.downcase}"
       end
-
+      
       def parent_div_status
         if !enabled_by_cookie
           'DISABLED'
-        elsif overall_max_severity < (QueryReviewer::CONFIGURATION['warn_severity'] || 4)
+        elsif overall_max_severity < QueryReviewer::CONFIGURATION.fetch('warn_severity', 4)
           'OK'
-        elsif overall_max_severity < (QueryReviewer::CONFIGURATION['critical_severity'] || 7)
-          # uh oh
+        elsif overall_max_severity < QueryReviewer::CONFIGURATION.fetch('critical_severity', 7)
           'WARNING'
         else
-          # oh @#&!
           'CRITICAL'
         end
       end
-
+      
       def syntax_highlighted_sql(sql)
         sql = sql.to_sql if sql.respond_to?(:to_sql)
-        if QueryReviewer::CONFIGURATION['uv']
+        if QueryReviewer::CONFIGURATION.fetch('uv', false)
           uv_out = Uv.parse(sql, 'xhtml', 'sql_rails', false, 'blackboard')
           uv_out.gsub('<pre class="blackboard">', '<code class="sql">').gsub('</pre>', '</code>')
         else
-          sql.gsub(/</, '&lt;').gsub(/>/, '&gt;')
+          CGI.escapeHTML(sql)
         end
       end
-
+      
       def overall_max_severity
-        max = 0
-        unless queries_with_warnings_sorted_nonignored.empty?
-          max = queries_with_warnings_sorted_nonignored[0].max_severity
-        end
-        unless warnings_no_query_sorted.empty? || warnings_no_query_sorted.first.severity < max
-          max = warnings_no_query_sorted.first.severity
-        end
-        max
+        queries_with_warnings_sorted_nonignored.first&.max_severity ||
+          warnings_no_query_sorted.first&.severity || 0
       end
-
+      
       def severity_color(severity)
-        red = (severity * 16.0 / 10).to_i
-        green = ((10 - severity) * 16.0 / 10).to_i
-        red = 8 if red > 8
-        red = 0 if red.negative?
-        green = 8 if green > 8
-        green = 0 if green.negative?
-        "##{red.to_s(16)}#{green.to_s(16)}0"
+        red = [8, (severity * 16.0 / 10).to_i].min.clamp(0, 8)
+        green = [8, ((10 - severity) * 16.0 / 10).to_i].min.clamp(0, 8)
+        format("#%<red>x%<green>x0", red: red, green: green)
       end
-
-      def ignore_hash?(h)
-        (controller.send(:cookies)['query_review_ignore_list'] || '').split(',').include?(h.to_s)
+      
+      def ignore_hash?(hash)
+        ignored_hashes.include?(hash.to_s)
       end
-
+      
+      def ignored_hashes
+        @ignored_hashes ||= (controller.cookies['query_review_ignore_list'] || '').split(',')
+      end
+      
       def queries_with_warnings
         @queries.queries.select(&:has_warnings?)
       end
-
+      
       def queries_with_warnings_sorted
-        queries_with_warnings.sort do |a, b|
-          (b.max_severity * 1000 + (b.duration || 0)) <=> (a.max_severity * 1000 + (a.duration || 0))
-        end
+        queries_with_warnings.sort_by { |q| [-q.max_severity, -(q.duration || 0)] }
       end
-
+      
       def queries_with_warnings_sorted_nonignored
-        queries_with_warnings_sorted.select do |q|
-          q.max_severity >= ::QueryReviewer::CONFIGURATION['warn_severity'] && !ignore_hash?(q.to_hash)
-        end
+        queries_with_warnings_sorted.reject { |q| ignore_hash?(q.to_hash) }
       end
-
+      
       def queries_with_warnings_sorted_ignored
-        queries_with_warnings_sorted.reject do |q|
-          q.max_severity >= ::QueryReviewer::CONFIGURATION['warn_severity'] && !ignore_hash?(q.to_hash)
-        end
+        queries_with_warnings_sorted.select { |q| ignore_hash?(q.to_hash) }
       end
-
+      
       def warnings_no_query_sorted
-        @queries.collection_warnings.sort { |a, b| a.severity <=> b.severity }.reverse
+        @queries.collection_warnings.sort_by(&:severity).reverse
       end
-
+      
       def warnings_no_query_sorted_ignored
-        warnings_no_query_sorted.select { |q| q.severity < ::QueryReviewer::CONFIGURATION['warn_severity'] }
+        warnings_no_query_sorted.reject { |w| w.severity >= QueryReviewer::CONFIGURATION.fetch('warn_severity', 4) }
       end
-
+      
       def warnings_no_query_sorted_nonignored
-        warnings_no_query_sorted.select { |q| q.severity >= ::QueryReviewer::CONFIGURATION['warn_severity'] }
+        warnings_no_query_sorted.select { |w| w.severity >= QueryReviewer::CONFIGURATION.fetch('warn_severity', 4) }
       end
-
+      
       def enabled_by_cookie
-        controller.send(:cookies)['query_review_enabled']
+        controller.cookies['query_review_enabled']
       end
-
+      
       def duration_with_color(query)
         title = query.duration_stats
         duration = query.duration
-        span_html = if duration > QueryReviewer::CONFIGURATION['critical_duration_threshold']
-                      "<span style=\"color: #{severity_color(9)}\" title=\"#{title}\">#{'%.3f' % duration}</span>"
-                    elsif duration > QueryReviewer::CONFIGURATION['warn_duration_threshold']
-                      "<span style=\"color: #{severity_color(QueryReviewer::CONFIGURATION['critical_severity'])}\" title=\"#{title}\">#{'%.3f' % duration}</span>"
-                    else
-                      "<span title=\"#{title}\">#{'%.3f' % duration}</span>"
-                    end
-        span_html.respond_to?(:html_safe) ? span_html.html_safe : span_html
+        severity = if duration > QueryReviewer::CONFIGURATION.fetch('critical_duration_threshold', 1)
+                     9
+                   elsif duration > QueryReviewer::CONFIGURATION.fetch('warn_duration_threshold', 0.5)
+                     QueryReviewer::CONFIGURATION.fetch('critical_severity', 7)
+                   end
+        
+        content_tag(:span, format('%.3f', duration), style: ("color: #{severity_color(severity)}" if severity), title: title)
       end
     end
   end

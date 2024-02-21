@@ -1,2 +1,1 @@
-
 require 'query_reviewer'
